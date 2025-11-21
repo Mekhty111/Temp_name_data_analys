@@ -50,16 +50,16 @@ class RetailSalesApp(ctk.CTk):
         self.menu_label = ctk.CTkLabel(self.sidebar, text="Меню", font=("Arial", 16, "bold"))
         self.menu_label.pack(pady=(10, 12))
 
-        self.load_btn = ctk.CTkButton(self.sidebar, text="Основная статистика", command=self.dataset_prep)
+        self.load_btn = ctk.CTkButton(self.sidebar, text="Препроцессинг", command=self.dataset_prep)
         self.load_btn.pack(fill=tk.X, pady=6)
 
-        self.summary_btn = ctk.CTkButton(self.sidebar, text="Cтатистика")
+        self.summary_btn = ctk.CTkButton(self.sidebar, text="Описательная статистика", command=self.statistic_prep)
         self.summary_btn.pack(fill=tk.X, pady=6)
 
-        self.category_btn = ctk.CTkButton(self.sidebar, text="Продажи по категориям")
+        self.category_btn = ctk.CTkButton(self.sidebar, text="Продажи по категориям", command=self.category_statist)
         self.category_btn.pack(fill=tk.X, pady=6)
 
-        self.month_btn = ctk.CTkButton(self.sidebar, text="Продажи по месяцам")
+        self.month_btn = ctk.CTkButton(self.sidebar, text="Продажи по месяцам", command=self.month_statist)
         self.month_btn.pack(fill=tk.X, pady=6)
 
         self.chart_btn = ctk.CTkButton(
@@ -272,6 +272,15 @@ class RetailSalesApp(ctk.CTk):
         )
         self.start_typing(self.stats_right, msg_right, delay=5, clear=True)
 
+
+    def statistic_prep(self):
+        df = self.df
+        statistic_data = pd.DataFrame([{'column' : 'Total Amount', 'mean_value' : df['Total Amount'].mean(), 'min_value': df['Total Amount'].min(), 'max_value':df['Total Amount'].max()}, {'column' : 'Quantity', 'mean_value' : df['Quantity'].mean(), 'min_value': df['Quantity'].min(), 'max_value':df['Quantity'].max()}])
+        
+        
+        self.start_typing(self.stats_left, statistic_data.to_string(), delay=5, clear=True)
+        self.start_typing(self.stats_right, '', delay=5, clear=True)
+        
     # ---------- Показ / скрытие графика ----------
     def toggle_chart(self):
         if not self.chart_visible:
