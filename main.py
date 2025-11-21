@@ -281,6 +281,91 @@ class RetailSalesApp(ctk.CTk):
         self.start_typing(self.stats_left, statistic_data.to_string(), delay=5, clear=True)
         self.start_typing(self.stats_right, '', delay=5, clear=True)
         
+    def category_statist(self):
+        # ЛЕВАЯ ASCII-диаграмма: средняя цена по месяцам
+        aggr_month = (
+            self.df.groupby("Month")["Price per Unit"]
+            .mean()
+            .sort_values(ascending=False)
+        )
+        def ascii_bar_from_series(
+            s: pd.Series,
+            label_width: int | None = None,
+            bar_width: int = 20,
+            char: str = "█",
+        ) -> str:
+            # (label, value)
+            stats = [(str(idx), float(val)) for idx, val in s.items()
+                     if pd.api.types.is_number(val)]
+            if not stats:
+                return "No numeric stats"
+
+            if label_width is None:
+                label_width = max(len(name) for name, _ in stats)
+
+            max_val = max(val for _, val in stats) or 1.0
+
+            lines: list[str] = []
+            for name, val in stats:
+                bar_len = int(val / max_val * bar_width)
+                bar = char * bar_len
+                line = f"{name:<{label_width}}: {bar:<{bar_width}} {val:.4g}"
+                lines.append(line)
+
+            return "\n".join(lines)
+
+        if self.df is None:
+            return
+        left_label_w = max(len(str(idx)) for idx in aggr_month.index) if len(aggr_month) else 10
+
+        msg_left = ascii_bar_from_series(
+            aggr_month, label_width=left_label_w, bar_width=22
+        )
+        self.start_typing(self.stats_left, msg_left, delay=5, clear=True)
+
+    def month_statist(self):
+                # ПРАВАЯ ASCII-диаграмма: средняя цена по категориям
+        aggr_cat = (
+            self.df.groupby("Product Category")["Price per Unit"]
+            .mean()
+            .sort_values(ascending=False)
+        )
+        def ascii_bar_from_series(
+            s: pd.Series,
+            label_width: int | None = None,
+            bar_width: int = 20,
+            char: str = "█",
+        ) -> str:
+            # (label, value)
+            stats = [(str(idx), float(val)) for idx, val in s.items()
+                     if pd.api.types.is_number(val)]
+            if not stats:
+                return "No numeric stats"
+
+            if label_width is None:
+                label_width = max(len(name) for name, _ in stats)
+
+            max_val = max(val for _, val in stats) or 1.0
+
+            lines: list[str] = []
+            for name, val in stats:
+                bar_len = int(val / max_val * bar_width)
+                bar = char * bar_len
+                line = f"{name:<{label_width}}: {bar:<{bar_width}} {val:.4g}"
+                lines.append(line)
+
+            return "\n".join(lines)
+
+        if self.df is None:
+            return
+        right_label_w = max(len(str(idx)) for idx in aggr_cat.index) if len(aggr_cat) else 10
+
+
+        msg_right = ascii_bar_from_series(
+            aggr_cat, label_width=right_label_w, bar_width=22
+        )
+        self.start_typing(self.stats_right, msg_right, delay=5, clear=True)
+        
     # ---------- Показ / скрытие графика ----------
     def toggle_chart(self):
         if not self.chart_visible:
