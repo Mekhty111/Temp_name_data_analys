@@ -1,6 +1,9 @@
 import customtkinter as ctk
 import tkinter as tk
 from tkinter import filedialog, messagebox
+import subprocess
+import sys
+import os
 
 import pandas as pd
 import numpy as np
@@ -20,6 +23,29 @@ CARD_BG = ("#0F172A", "#020617")
 
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
+
+
+def normalize_column_name(df, possible_names):
+    """Find column name in DataFrame (case-insensitive, handles both Title Case and snake_case)"""
+    df_cols = df.columns.tolist()
+    for name in possible_names:
+        if name in df_cols:
+            return name
+        for col in df_cols:
+            if col.lower() == name.lower():
+                return col
+    return None
+
+
+def get_column_names(df):
+    """Get normalized column names from DataFrame"""
+    return {
+        'date': normalize_column_name(df, ['Date', 'date']),
+        'category': normalize_column_name(df, ['Product Category', 'product_category', 'ProductCategory']),
+        'quantity': normalize_column_name(df, ['Quantity', 'quantity']),
+        'price': normalize_column_name(df, ['Price per Unit', 'price_per_unit', 'PricePerUnit']),
+        'total': normalize_column_name(df, ['Total Amount', 'total_amount', 'TotalAmount']),
+    }
 
 
 class RetailSalesApp(ctk.CTk):
@@ -125,6 +151,18 @@ class RetailSalesApp(ctk.CTk):
             **btn_kwargs
         )
         self.ascii_btn.pack(fill=tk.X, padx=8, pady=2)
+
+        self.cli_btn = ctk.CTkButton(
+            self.sidebar,
+            text="Open CLI interface",
+            command=self.open_cli,
+            font=base_font,
+            height=26,
+            fg_color=ACCENT,
+            hover_color="#0D9488",
+            text_color="black"
+        )
+        self.cli_btn.pack(fill=tk.X, padx=8, pady=2)
 
         # Separator
         self.separator = ctk.CTkFrame(self.sidebar, height=2, fg_color="#1E293B")
@@ -263,6 +301,12 @@ class RetailSalesApp(ctk.CTk):
         self.top_entry.delete(0, "end")
         self.on_filter_change(None)
 
+    def get_column_names(self):
+        """Get normalized column names from DataFrame"""
+        if self.df is None:
+            return None
+        return get_column_names(self.df)
+
     def get_filtered_df(self):
         if self.df is None:
             return None
@@ -270,12 +314,16 @@ class RetailSalesApp(ctk.CTk):
         df = self.df.copy()
         cat_val = self.category_option.get()
         month_val = self.month_option.get()
+        
+        cols = get_column_names(df)
+        cat_col = cols.get('category') or "Product Category"
+        month_col = "Month"
 
-        if "Product Category" in df.columns and cat_val and cat_val != "All categories":
-            df = df[df["Product Category"] == cat_val]
+        if cat_col in df.columns and cat_val and cat_val != "All categories":
+            df = df[df[cat_col] == cat_val]
 
-        if "Month" in df.columns and month_val and month_val != "All months":
-            df = df[df["Month"] == month_val]
+        if month_col in df.columns and month_val and month_val != "All months":
+            df = df[df[month_col] == month_val]
 
         return df
 
@@ -292,25 +340,34 @@ class RetailSalesApp(ctk.CTk):
                 self.draw_matplotlib_charts()
             return
 
+        cols = get_column_names(df)
         lines = ["Statistics for selected filters:\n"]
-        if "Total Amount" in df.columns:
-            lines.append(
-                f"Total Amount: count={df['Total Amount'].count()}, "
-                f"sum={df['Total Amount'].sum():.2f}, "
-                f"mean={df['Total Amount'].mean():.2f}"
-            )
-        if "Quantity" in df.columns:
-            lines.append(
-                f"Quantity: count={df['Quantity'].count()}, "
-                f"sum={df['Quantity'].sum():.0f}, "
-                f"mean={df['Quantity'].mean():.2f}"
-            )
-        if "Price per Unit" in df.columns:
-            lines.append(
-                f"Price per Unit: min={df['Price per Unit'].min():.2f}, "
-                f"max={df['Price per Unit'].max():.2f}, "
-                f"mean={df['Price per Unit'].mean():.2f}"
-            )
+        
+        total_col = cols.get('total') or "Total Amount"
+        qty_col = cols.get('quantity') or "Quantity"
+        price_col = cols.get('price') or "Price per Unit"
+        
+        if total_col in df.columns:
+            total_series = df[total_col]
+            lines.append(f"Total Amount:")
+            lines.append(f"  Count:  {total_series.count()}")
+            lines.append(f"  Sum:    {total_series.sum():.2f}")
+            lines.append(f"  Mean:   {total_series.mean():.2f}")
+            lines.append(f"  Median: {total_series.median():.2f}")
+            lines.append(f"  Std:    {total_series.std():.2f}")
+            lines.append(f"  Min:    {total_series.min():.2f}")
+            lines.append(f"  Max:    {total_series.max():.2f}")
+        
+        if qty_col in df.columns:
+            qty_series = df[qty_col]
+            lines.append(f"\nQuantity:")
+            lines.append(f"  Count:  {qty_series.count()}")
+            lines.append(f"  Sum:    {qty_series.sum():.0f}")
+            lines.append(f"  Mean:   {qty_series.mean():.2f}")
+            lines.append(f"  Median: {qty_series.median():.2f}")
+            lines.append(f"  Std:    {qty_series.std():.2f}")
+            lines.append(f"  Min:    {qty_series.min():.0f}")
+            lines.append(f"  Max:    {qty_series.max():.0f}")
 
         self.start_typing(
             self.stats_left,
@@ -342,15 +399,19 @@ class RetailSalesApp(ctk.CTk):
             full_text = f"Dataset statistics:\n\n{info_text}"
             self.start_typing(self.stats_left, full_text, delay=2, clear=True)
 
-            if "Product Category" in self.df.columns:
-                cats = sorted(self.df["Product Category"].dropna().unique().tolist())
+            cols = get_column_names(self.df)
+            cat_col = cols.get('category') or "Product Category"
+            
+            if cat_col in self.df.columns:
+                cats = sorted(self.df[cat_col].dropna().unique().tolist())
                 self.category_option.configure(values=["All categories"] + cats)
                 self.category_option.set("All categories")
 
-            if "Date" in self.df.columns:
+            date_col = cols.get('date') or "Date"
+            if date_col in self.df.columns:
                 try:
-                    self.df["Date"] = pd.to_datetime(self.df["Date"])
-                    self.df["Month"] = self.df["Date"].dt.month_name()
+                    self.df[date_col] = pd.to_datetime(self.df[date_col])
+                    self.df["Month"] = self.df[date_col].dt.month_name()
                     months = self.df["Month"].dropna().unique().tolist()
                     month_order = [
                         "January", "February", "March", "April", "May", "June",
@@ -404,12 +465,13 @@ class RetailSalesApp(ctk.CTk):
         df = self.df.copy()
         original_rows = len(df)
 
-        # Columns of interest
-        date_col = "Date"
-        cat_col = "Product Category"
-        qty_col = "Quantity"
-        price_col = "Price per Unit"
-        total_col = "Total Amount"
+        # Get column names (normalized)
+        cols = get_column_names(df)
+        date_col = cols.get('date') or "Date"
+        cat_col = cols.get('category') or "Product Category"
+        qty_col = cols.get('quantity') or "Quantity"
+        price_col = cols.get('price') or "Price per Unit"
+        total_col = cols.get('total') or "Total Amount"
 
         summary_lines = []
         summary_lines.append("Preprocessing and data cleaning report:\n")
@@ -439,6 +501,10 @@ class RetailSalesApp(ctk.CTk):
                     f"non-numeric to NaN: {after_non_numeric - before_non_numeric}"
                 )
                 numeric_cols.append(col)
+                # Convert quantity to int
+                if col == qty_col:
+                    df[col] = df[col].fillna(0).astype(int)
+                    summary_lines.append(f"- {col}: converted to integer type")
             else:
                 summary_lines.append(f"- Column '{col}' not found.")
 
@@ -546,31 +612,38 @@ class RetailSalesApp(ctk.CTk):
         if df is None or df.empty:
             return
 
+        cols = get_column_names(df)
+        total_col = cols.get('total') or "Total Amount"
+        cat_col = cols.get('category') or "Product Category"
+        
+        # Aggregate by total sales (sum), not average price
         aggr_month = (
-            df.groupby("Month")["Price per Unit"]
-            .mean()
+            df.groupby("Month")[total_col]
+            .sum()
             .sort_values(ascending=False)
         )
         aggr_cat = (
-            df.groupby("Product Category")["Price per Unit"]
-            .mean()
+            df.groupby(cat_col)[total_col]
+            .sum()
             .sort_values(ascending=False)
         )
+        
         n_cat = self.top_entry.get()
         try:
             n_val = int(n_cat)
-            aggr_month = aggr_month[:n_val]
-            aggr_cat = aggr_cat[:n_val]
+            if n_val > 0:
+                aggr_month = aggr_month.head(n_val)
+                aggr_cat = aggr_cat.head(n_val)
         except Exception:
             pass
 
         left_label_w = max(len(str(idx)) for idx in aggr_month.index) if len(aggr_month) else 10
         right_label_w = max(len(str(idx)) for idx in aggr_cat.index) if len(aggr_cat) else 10
 
-        msg_left = self._ascii_bar_from_series(
+        msg_left = "Sales by Month (Total Amount):\n\n" + self._ascii_bar_from_series(
             aggr_month, label_width=left_label_w, bar_width=22
         )
-        msg_right = self._ascii_bar_from_series(
+        msg_right = "Sales by Category (Total Amount):\n\n" + self._ascii_bar_from_series(
             aggr_cat, label_width=right_label_w, bar_width=22
         )
 
@@ -585,28 +658,46 @@ class RetailSalesApp(ctk.CTk):
         if df is None or df.empty:
             return
 
-        statistic_data = pd.DataFrame([
-            {
-                "column": "Total Amount",
-                "mean_value": df["Total Amount"].mean(),
-                "min_value": df["Total Amount"].min(),
-                "max_value": df["Total Amount"].max(),
-            },
-            {
-                "column": "Quantity",
-                "mean_value": df["Quantity"].mean(),
-                "min_value": df["Quantity"].min(),
-                "max_value": df["Quantity"].max(),
-            },
-        ])
+        cols = get_column_names(df)
+        total_col = cols.get('total') or "Total Amount"
+        qty_col = cols.get('quantity') or "Quantity"
+        
+        lines_left = ["Descriptive Statistics\n"]
+        lines_left.append("=" * 50)
+        
+        if total_col in df.columns:
+            total_series = df[total_col]
+            lines_left.append(f"\nTotal Amount:")
+            lines_left.append(f"  Count:  {total_series.count()}")
+            lines_left.append(f"  Mean:   {total_series.mean():.2f}")
+            lines_left.append(f"  Median: {total_series.median():.2f}")
+            lines_left.append(f"  Std:    {total_series.std():.2f}")
+            lines_left.append(f"  Min:    {total_series.min():.2f}")
+            lines_left.append(f"  Max:    {total_series.max():.2f}")
+        
+        lines_right = []
+        if qty_col in df.columns:
+            qty_series = df[qty_col]
+            lines_right.append("Quantity:")
+            lines_right.append(f"  Count:  {qty_series.count()}")
+            lines_right.append(f"  Mean:   {qty_series.mean():.2f}")
+            lines_right.append(f"  Median: {qty_series.median():.2f}")
+            lines_right.append(f"  Std:    {qty_series.std():.2f}")
+            lines_right.append(f"  Min:    {qty_series.min():.0f}")
+            lines_right.append(f"  Max:    {qty_series.max():.0f}")
 
         self.start_typing(
             self.stats_left,
-            statistic_data.to_string(index=False),
+            "\n".join(lines_left),
             delay=2,
             clear=True
         )
-        self.start_typing(self.stats_right, "", delay=2, clear=True)
+        self.start_typing(
+            self.stats_right,
+            "\n".join(lines_right),
+            delay=2,
+            clear=True
+        )
 
     # ----------------- ASCII BY CATEGORY / MONTH -----------------
     def category_statist(self):
@@ -617,20 +708,28 @@ class RetailSalesApp(ctk.CTk):
         if df is None or df.empty:
             return
 
+        cols = get_column_names(df)
+        total_col = cols.get('total') or "Total Amount"
+        cat_col = cols.get('category') or "Product Category"
+        
+        # Aggregate by total sales (sum), not average price
         aggr_cat = (
-            df.groupby("Product Category")["Price per Unit"]
-            .mean()
+            df.groupby(cat_col)[total_col]
+            .sum()
             .sort_values(ascending=False)
         )
+        
         n_cat = self.top_entry.get()
         try:
-            aggr_cat = aggr_cat[:int(n_cat)]
+            n_val = int(n_cat)
+            if n_val > 0:
+                aggr_cat = aggr_cat.head(n_val)
         except Exception:
             pass
 
         left_label_w = max(len(str(idx)) for idx in aggr_cat.index) if len(aggr_cat) else 10
 
-        msg_left = self._ascii_bar_from_series(
+        msg_left = "Sales by Category (Total Amount):\n\n" + self._ascii_bar_from_series(
             aggr_cat, label_width=left_label_w, bar_width=22
         )
         self.start_typing(self.stats_left, msg_left, delay=2, clear=True)
@@ -643,20 +742,36 @@ class RetailSalesApp(ctk.CTk):
         if df is None or df.empty:
             return
 
+        cols = get_column_names(df)
+        total_col = cols.get('total') or "Total Amount"
+        
+        # Aggregate by total sales (sum), not average price
         aggr_month = (
-            df.groupby("Month")["Price per Unit"]
-            .mean()
+            df.groupby("Month")[total_col]
+            .sum()
             .sort_values(ascending=False)
         )
+        
+        # Order months properly
+        month_order = [
+            "January", "February", "March", "April", "May", "June",
+            "July", "August", "September", "October", "November", "December"
+        ]
+        aggr_month = aggr_month.reindex(
+            [m for m in month_order if m in aggr_month.index]
+        )
+        
         n_cat = self.top_entry.get()
         try:
-            aggr_month = aggr_month[:int(n_cat)]
+            n_val = int(n_cat)
+            if n_val > 0:
+                aggr_month = aggr_month.head(n_val)
         except Exception:
             pass
 
         right_label_w = max(len(str(idx)) for idx in aggr_month.index) if len(aggr_month) else 10
 
-        msg_right = self._ascii_bar_from_series(
+        msg_right = "Sales by Month (Total Amount):\n\n" + self._ascii_bar_from_series(
             aggr_month, label_width=right_label_w, bar_width=22
         )
         self.start_typing(self.stats_right, msg_right, delay=2, clear=True)
@@ -699,7 +814,12 @@ class RetailSalesApp(ctk.CTk):
             self.canvas.draw()
             return
 
-        monthly_sales = df.groupby("Month")["Price per Unit"].mean()
+        cols = get_column_names(df)
+        total_col = cols.get('total') or "Total Amount"
+        cat_col = cols.get('category') or "Product Category"
+        
+        # Aggregate by total sales (sum), not average price
+        monthly_sales = df.groupby("Month")[total_col].sum()
         month_order = [
             "January", "February", "March", "April", "May", "June",
             "July", "August", "September", "October", "November", "December"
@@ -709,8 +829,8 @@ class RetailSalesApp(ctk.CTk):
         )
 
         category_sales = (
-            df.groupby("Product Category")["Price per Unit"]
-            .mean()
+            df.groupby(cat_col)[total_col]
+            .sum()
             .sort_values(ascending=False)
         )
 
@@ -733,8 +853,8 @@ class RetailSalesApp(ctk.CTk):
                 ha="right",
                 fontsize=8
             )
-            self.ax_month.set_title("Average price by month", fontsize=9)
-            self.ax_month.set_ylabel("Price per unit", fontsize=8)
+            self.ax_month.set_title("Total sales by month", fontsize=9)
+            self.ax_month.set_ylabel("Total Amount", fontsize=8)
             self.ax_month.grid(axis="y", linestyle="--", alpha=0.3)
         else:
             self.ax_month.text(
@@ -753,7 +873,8 @@ class RetailSalesApp(ctk.CTk):
                 ha="right",
                 fontsize=8
             )
-            self.ax_cat.set_title("Average price by category", fontsize=9)
+            self.ax_cat.set_title("Total sales by category", fontsize=9)
+            self.ax_cat.set_ylabel("Total Amount", fontsize=8)
             self.ax_cat.grid(axis="y", linestyle="--", alpha=0.3)
         else:
             self.ax_cat.text(
@@ -764,6 +885,23 @@ class RetailSalesApp(ctk.CTk):
 
         self.fig.tight_layout()
         self.canvas.draw()
+
+    def open_cli(self):
+        """Open CLI interface in a new terminal window"""
+        try:
+            script_path = os.path.join(os.path.dirname(__file__), "cli_interface.py")
+            python_exe = sys.executable
+            
+            if sys.platform == "win32":
+                subprocess.Popen(["start", "cmd", "/k", f"{python_exe} {script_path}"], shell=True)
+            elif sys.platform == "darwin":  # macOS
+                # Use osascript to open Terminal and run the script
+                cmd = f'osascript -e \'tell application "Terminal" to do script "{python_exe} {script_path}"\''
+                subprocess.Popen(cmd, shell=True)
+            else:  # Linux
+                subprocess.Popen(["xterm", "-e", f"{python_exe} {script_path}"])
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to open CLI interface:\n{e}\n\nYou can run it manually:\npython cli_interface.py")
 
 
 if __name__ == "__main__":
