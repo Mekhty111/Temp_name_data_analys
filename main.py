@@ -13,17 +13,14 @@ matplotlib.use("TkAgg")
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
-
 PRIMARY = ("#3B82F6", "#2563EB")
 ACCENT  = ("#2DD4BF", "#14B8A6")
 DANGER  = ("#F97373", "#EF4444")
 BG      = "#020617"
 CARD_BG = ("#0F172A", "#020617")
 
-
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
-
 
 def normalize_column_name(df, possible_names):
     """Find column name in DataFrame (case-insensitive, handles both Title Case and snake_case)"""
@@ -36,7 +33,6 @@ def normalize_column_name(df, possible_names):
                 return col
     return None
 
-
 def get_column_names(df):
     """Get normalized column names from DataFrame"""
     return {
@@ -47,13 +43,12 @@ def get_column_names(df):
         'total': normalize_column_name(df, ['Total Amount', 'total_amount', 'TotalAmount']),
     }
 
-
 class RetailSalesApp(ctk.CTk):
     def __init__(self):
         super().__init__()
 
         self.title("Retail Sales Analysis")
-        self.geometry("1040x640")      # a bit lower and narrower
+        self.geometry("1040x640")
         self.resizable(False, False)
         self.configure(fg_color=BG)
 
@@ -144,6 +139,18 @@ class RetailSalesApp(ctk.CTk):
         )
         self.chart_btn.pack(fill=tk.X, padx=8, pady=3)
 
+        self.simpson_btn = ctk.CTkButton(
+            self.sidebar,
+            text="Simpson demo",
+            command=self.simpson_demo,
+            font=base_font,
+            height=26,
+            fg_color=ACCENT,
+            hover_color="#0D9488",
+            text_color="black"
+        )
+        self.simpson_btn.pack(fill=tk.X, padx=8, pady=2)
+
         self.ascii_btn = ctk.CTkButton(
             self.sidebar,
             text="ASCII histograms",
@@ -227,7 +234,7 @@ class RetailSalesApp(ctk.CTk):
         self.sidebar_spacer = ctk.CTkFrame(self.sidebar, fg_color="transparent")
         self.sidebar_spacer.pack(expand=True, fill=tk.BOTH)
 
-        # Exit button (now very compact)
+        # Exit button
         self.exit_btn = ctk.CTkButton(
             self.sidebar,
             text="Exit",
@@ -426,7 +433,6 @@ class RetailSalesApp(ctk.CTk):
         except Exception as e:
             messagebox.showerror("Error", f"Failed to read CSV:\n{e}")
 
-    # make textbox read-only (state="disabled" after writing)
     def type_text(self, widget: ctk.CTkTextbox, text: str,
                   i: int = 0, delay: int = 5, clear: bool = False):
         if i == 0:
@@ -440,7 +446,7 @@ class RetailSalesApp(ctk.CTk):
             self.update_idletasks()
             self.after(delay, self.type_text, widget, text, i + 1, delay, False)
         else:
-            widget.configure(state="disabled")  # disable manual input
+            widget.configure(state="disabled")
 
     def start_typing(self, widget: ctk.CTkTextbox, text: str,
                      delay: int = 5, clear: bool = False):
@@ -448,15 +454,6 @@ class RetailSalesApp(ctk.CTk):
 
     # ----------------- PREPROCESSING + CLEANING -----------------
     def dataset_prep(self):
-        """
-        Preprocess dataset:
-        - Parse dates
-        - Ensure types for key columns
-        - Drop missing values in key columns
-        - Detect and remove outliers in numeric columns (IQR method)
-        - Show cleaning summary in LEFT textbox
-        - Show resulting DataFrame info in RIGHT textbox
-        """
         if self.df is None:
             msg = "Please select a CSV file first."
             self.start_typing(self.stats_right, msg, delay=5, clear=True)
@@ -465,7 +462,6 @@ class RetailSalesApp(ctk.CTk):
         df = self.df.copy()
         original_rows = len(df)
 
-        # Get column names (normalized)
         cols = get_column_names(df)
         date_col = cols.get('date') or "Date"
         cat_col = cols.get('category') or "Product Category"
@@ -477,7 +473,6 @@ class RetailSalesApp(ctk.CTk):
         summary_lines.append("Preprocessing and data cleaning report:\n")
         summary_lines.append(f"Initial number of rows: {original_rows}")
 
-        # --- Date parsing ---
         if date_col in df.columns:
             before_invalid = df[date_col].isna().sum()
             df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
@@ -489,7 +484,6 @@ class RetailSalesApp(ctk.CTk):
         else:
             summary_lines.append(f"- Column '{date_col}' not found.")
 
-        # --- Ensure numeric columns ---
         numeric_cols = []
         for col in [qty_col, price_col, total_col]:
             if col in df.columns:
@@ -501,14 +495,12 @@ class RetailSalesApp(ctk.CTk):
                     f"non-numeric to NaN: {after_non_numeric - before_non_numeric}"
                 )
                 numeric_cols.append(col)
-                # Convert quantity to int
                 if col == qty_col:
                     df[col] = df[col].fillna(0).astype(int)
                     summary_lines.append(f"- {col}: converted to integer type")
             else:
                 summary_lines.append(f"- Column '{col}' not found.")
 
-        # --- Drop rows with missing values in key columns ---
         key_cols = [c for c in [date_col, cat_col, qty_col, price_col, total_col] if c in df.columns]
         if key_cols:
             before_drop_na = len(df)
@@ -521,12 +513,10 @@ class RetailSalesApp(ctk.CTk):
         else:
             summary_lines.append("- No key columns found to check missing values.")
 
-        # --- Add Month column (after Date is cleaned) ---
         if date_col in df.columns:
             df["Month"] = df[date_col].dt.month_name()
             summary_lines.append("- 'Month' column added from 'Date'.")
 
-        # --- Detect and remove outliers (IQR) in numeric columns ---
         def iqr_filter(series: pd.Series):
             q1 = series.quantile(0.25)
             q3 = series.quantile(0.75)
@@ -542,7 +532,6 @@ class RetailSalesApp(ctk.CTk):
             outlier_mask = pd.Series(False, index=df.index)
             for col in numeric_cols:
                 mask = iqr_filter(df[col].dropna())
-                # align mask to df index
                 mask = mask.reindex(df.index, fill_value=False)
                 n_outliers = mask.sum()
                 summary_lines.append(
@@ -564,17 +553,14 @@ class RetailSalesApp(ctk.CTk):
         summary_lines.append(f"\nFinal number of rows after cleaning: {final_rows}")
         summary_text = "\n".join(summary_lines)
 
-        # Save back cleaned df
         self.df = df
 
-        # Info after preprocessing
         buffer = io.StringIO()
         self.df.info(buf=buffer)
         info_after = buffer.getvalue()
 
         right_msg = "DataFrame info after preprocessing:\n\n" + info_after
 
-        # LEFT: cleaning report, RIGHT: final info
         self.start_typing(self.stats_left, summary_text, delay=2, clear=True)
         self.start_typing(self.stats_right, right_msg, delay=2, clear=True)
 
@@ -616,7 +602,6 @@ class RetailSalesApp(ctk.CTk):
         total_col = cols.get('total') or "Total Amount"
         cat_col = cols.get('category') or "Product Category"
         
-        # Aggregate by total sales (sum), not average price
         aggr_month = (
             df.groupby("Month")[total_col]
             .sum()
@@ -649,6 +634,89 @@ class RetailSalesApp(ctk.CTk):
 
         self.start_typing(self.stats_left, msg_left, delay=2, clear=True)
         self.start_typing(self.stats_right, msg_right, delay=2, clear=True)
+
+    # ----------------- SIMPSON'S PARADOX DEMO -----------------
+    def simpson_demo(self):
+        if self.df is None:
+            self.start_typing(self.stats_left, "Load CSV first!", delay=2, clear=True)
+            return
+
+        df = self.get_filtered_df()
+        if df is None or df.empty:
+            self.start_typing(self.stats_left, "No data for current filters!", delay=2, clear=True)
+            return
+
+        cols = get_column_names(df)
+        total_col = cols.get('total') or "Total Amount"
+        qty_col = cols.get('quantity') or "Quantity"
+        cat_col = cols.get('category') or "Product Category"
+        
+        if total_col not in df.columns or qty_col not in df.columns:
+            self.start_typing(self.stats_left, 
+                "Need 'Total Amount' and 'Quantity' columns for Simpson demo!", 
+                delay=2, clear=True)
+            return
+
+        # Calculate average check = Total / Quantity
+        df_demo = df.copy()
+        df_demo["avg_check"] = df_demo[total_col] / df_demo[qty_col].replace(0, np.nan)
+        df_demo = df_demo.dropna(subset=["avg_check"])
+
+        if len(df_demo) == 0:
+            self.start_typing(self.stats_left, "No valid avg_check data!", delay=2, clear=True)
+            return
+
+        # 1. LOCAL TREND: unweighted mean of avg_check by category within each month
+        local_trend = (
+            df_demo.groupby(["Month", cat_col])["avg_check"]
+            .mean()
+            .groupby("Month")
+            .mean()
+            .sort_index()
+        )
+
+        # 2. GLOBAL TREND: associative aggregation (weighted by quantity)
+        # First: aggregate by category+month, then by month (sum total/sum qty)
+        by_cat_month = df_demo.groupby(["Month", cat_col]).agg(
+            total_amount=(total_col, "sum"),
+            total_qty=(qty_col, "sum")
+        ).reset_index()
+        global_trend = (
+            by_cat_month.groupby("Month")
+            .apply(lambda g: g["total_amount"].sum() / g["total_qty"].sum(), axis=1)
+            .sort_index()
+        )
+
+        # Build comparison table
+        lines = ["🟥 SIMPSON'S PARADOX: Average Check per Month\n"]
+        lines.append("=" * 60)
+        lines.append("LOCAL (unweighted avg by category) vs GLOBAL (weighted by qty)")
+        lines.append("")
+
+        month_order = ["January", "February", "March", "April", "May", "June",
+                      "July", "August", "September", "October", "November", "December"]
+        
+        for month in month_order:
+            if month in local_trend.index and month in global_trend.index:
+                local_val = local_trend[month]
+                global_val = global_trend[month]
+                trend = "↑" if local_val < global_val else "↓" if local_val > global_val else "→"
+                lines.append(f"{month:<12} | LOCAL: {local_val:6.1f} | GLOBAL: {global_val:6.1f} {trend}")
+        
+        lines.append("")
+        lines.append("💡 ASSOCIATIVE AGGREGATION: sum(total)/sum(qty) by blocks")
+        lines.append("   gives different trend from simple mean of subgroup averages!")
+
+        self.start_typing(self.stats_left, "\n".join(lines), delay=3, clear=True)
+        
+        # Right panel: detailed breakdown
+        detail_lines = ["Detailed breakdown (first 10 cat+month groups):\n"]
+        detail_lines.extend(
+            f"{row['Month'][:4]:<6} {row[cat_col][:15]:<15} | "
+            f"{row['total_amount']:8.0f} / {row['total_qty']:4.0f} = {row['avg_check']:6.1f}"
+            for _, row in by_cat_month.head(10).reset_index().itertuples()
+        )
+        self.start_typing(self.stats_right, "\n".join(detail_lines), delay=3, clear=True)
 
     # ----------------- DESCRIPTIVE STATISTICS -----------------
     def statistic_prep(self):
@@ -699,7 +767,6 @@ class RetailSalesApp(ctk.CTk):
             clear=True
         )
 
-    # ----------------- ASCII BY CATEGORY / MONTH -----------------
     def category_statist(self):
         if self.df is None:
             return
@@ -712,7 +779,6 @@ class RetailSalesApp(ctk.CTk):
         total_col = cols.get('total') or "Total Amount"
         cat_col = cols.get('category') or "Product Category"
         
-        # Aggregate by total sales (sum), not average price
         aggr_cat = (
             df.groupby(cat_col)[total_col]
             .sum()
@@ -745,14 +811,12 @@ class RetailSalesApp(ctk.CTk):
         cols = get_column_names(df)
         total_col = cols.get('total') or "Total Amount"
         
-        # Aggregate by total sales (sum), not average price
         aggr_month = (
             df.groupby("Month")[total_col]
             .sum()
             .sort_values(ascending=False)
         )
         
-        # Order months properly
         month_order = [
             "January", "February", "March", "April", "May", "June",
             "July", "August", "September", "October", "November", "December"
@@ -818,7 +882,6 @@ class RetailSalesApp(ctk.CTk):
         total_col = cols.get('total') or "Total Amount"
         cat_col = cols.get('category') or "Product Category"
         
-        # Aggregate by total sales (sum), not average price
         monthly_sales = df.groupby("Month")[total_col].sum()
         month_order = [
             "January", "February", "March", "April", "May", "June",
@@ -895,14 +958,12 @@ class RetailSalesApp(ctk.CTk):
             if sys.platform == "win32":
                 subprocess.Popen(["start", "cmd", "/k", f"{python_exe} {script_path}"], shell=True)
             elif sys.platform == "darwin":  # macOS
-                # Use osascript to open Terminal and run the script
                 cmd = f'osascript -e \'tell application "Terminal" to do script "{python_exe} {script_path}"\''
                 subprocess.Popen(cmd, shell=True)
             else:  # Linux
                 subprocess.Popen(["xterm", "-e", f"{python_exe} {script_path}"])
         except Exception as e:
             messagebox.showerror("Error", f"Failed to open CLI interface:\n{e}\n\nYou can run it manually:\npython cli_interface.py")
-
 
 if __name__ == "__main__":
     app = RetailSalesApp()
